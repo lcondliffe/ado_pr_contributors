@@ -5,11 +5,12 @@ A Python script that fetches and analyzes Pull Request data from Azure DevOps us
 ## Features
 
 - Analyze PR contributions by authors, reviewers, and repositories
+- Support for single or multiple project analysis
 - Flexible time period selection (current month, specific month, or entire year)
 - Support for both PR creation date and completion date filtering
 - Progress tracking with configurable verbosity levels
 - Automatic Azure CLI authentication
-- Cross-repository analysis within a project
+- Cross-repository analysis within a project or across multiple projects
 
 ## Prerequisites
 
@@ -39,6 +40,9 @@ python ado_pr_contribution.py
 # Current month, specific project
 python ado_pr_contribution.py "project_name"
 
+# Current month, multiple projects
+python ado_pr_contribution.py "project1,project2,project3"
+
 # Whole year, default project
 python ado_pr_contribution.py 2024
 
@@ -48,8 +52,14 @@ python ado_pr_contribution.py 2024 7
 # Whole year, specific project
 python ado_pr_contribution.py "project_name" 2024
 
+# Whole year, multiple projects
+python ado_pr_contribution.py "project1,project2" 2024
+
 # Specific month, specific project
 python ado_pr_contribution.py "project_name" 2024 7
+
+# Specific month, multiple projects
+python ado_pr_contribution.py "project1,project2" 2024 7
 ```
 
 ### Verbosity Options
@@ -59,7 +69,19 @@ python ado_pr_contribution.py -v
 
 # Show detailed debug information
 python ado_pr_contribution.py -vv "project_name" 2024
+
+# Multiple projects with verbosity
+python ado_pr_contribution.py -vv "project1,project2" 2024
 ```
+
+### Multiple Projects
+
+When specifying multiple projects, separate them with commas:
+- `"ic.cloud-core,spt.backlog"` - Two projects
+- `"project1,project2,project3"` - Three projects
+- Spaces around commas are automatically trimmed
+
+The script will fetch data from all specified projects and aggregate the results into combined statistics.
 
 ## Configuration
 
@@ -72,12 +94,15 @@ You can modify the following configuration variables at the top of the script:
 
 The script provides:
 
-1. **Top 10 Authors**: Contributors with the most PRs
-2. **Top 10 Reviewers**: People who reviewed the most PRs
-3. **Top 10 Repositories**: Repos with the most PR activity
-4. **Total PR Count**: Overall number of PRs in the specified period
+1. **Top 10 Authors**: Contributors with the most PRs across all specified projects
+2. **Top 10 Reviewers**: People who reviewed the most PRs across all specified projects
+3. **Top 10 Repositories**: Repos with the most PR activity across all specified projects
+4. **Project Breakdown**: When analyzing multiple projects, shows PR count per project
+5. **Total PR Count**: Overall number of PRs in the specified period across all projects
 
 ### Sample Output
+
+#### Single Project
 ```
 ### Overall PR Contributions for 2024-07 for Project 'my-project'
 
@@ -94,6 +119,30 @@ Top 10 reviewers:
 Top 10 repos by PR activity:
   frontend-app: 20 PRs
   backend-api: 15 PRs
+  ...
+```
+
+#### Multiple Projects
+```
+### Overall PR Contributions for 2024-07 for Projects 'ic.cloud-core', 'spt.backlog'
+
+Project breakdown:
+  ic.cloud-core: 45 PRs
+  spt.backlog: 23 PRs
+
+Top 10 authors:
+  John Doe: 18 PRs
+  Jane Smith: 15 PRs
+  ...
+
+Top 10 reviewers:
+  Alice Johnson: 30 reviews
+  Bob Wilson: 22 reviews
+  ...
+
+Top 10 repos by PR activity:
+  frontend-app: 25 PRs
+  backend-api: 20 PRs
   ...
 ```
 
@@ -114,6 +163,7 @@ The script handles common scenarios:
 - Network connectivity issues
 - Invalid date formats from the API
 - Missing or invalid command line arguments
+- Failed access to individual projects (continues with remaining projects)
 
 ## Limitations
 
