@@ -8,10 +8,13 @@ It provides statistics on top authors, reviewers, and repositories for a given t
 Usage:
     python pr_contribution_api.py [-v|-vv]                              # Current month, default project
     python pr_contribution_api.py [-v|-vv] "project_name"               # Current month, specific project
+    python pr_contribution_api.py [-v|-vv] "project1,project2"          # Current month, multiple projects
     python pr_contribution_api.py [-v|-vv] 2025                         # Whole year, default project
     python pr_contribution_api.py [-v|-vv] 2025 1                       # Specific month, default project
     python pr_contribution_api.py [-v|-vv] "project_name" 2025          # Whole year, specific project
+    python pr_contribution_api.py [-v|-vv] "project1,project2" 2025     # Whole year, multiple projects
     python pr_contribution_api.py [-v|-vv] "project_name" 2025 1        # Specific month, specific project
+    python pr_contribution_api.py [-v|-vv] "project1,project2" 2025 1   # Specific month, multiple projects
 
 Verbosity options:
     -v   Show progress information (e.g., "25/100 repos processed")
@@ -219,8 +222,9 @@ class AzureDevOpsAPI:
                         end_dt = datetime.fromisoformat(end_date).date()
                         
                         if start_dt <= pr_date < end_dt:
-                            # Add repository name to PR data
+                            # Add repository name and project name to PR data
                             pr['repositoryName'] = repo_name
+                            pr['projectName'] = self.project
                             filtered_prs.append(pr)
                 
                 all_prs.extend(filtered_prs)
@@ -274,7 +278,7 @@ class AzureDevOpsAPI:
         
         return all_prs
 
-def parse_arguments() -> Tuple[str, Optional[str], Optional[str], bool, bool]:
+def parse_arguments() -> Tuple[List[str], Optional[str], Optional[str], bool, bool]:
     """Parse command line arguments"""
     global VERBOSITY
     
@@ -295,22 +299,23 @@ def parse_arguments() -> Tuple[str, Optional[str], Optional[str], bool, bool]:
     try:
         if len(sys.argv) == 1:
             # No arguments: Default project, current month
-            return DEFAULT_PROJECT, None, None, True, False
+            return [DEFAULT_PROJECT], None, None, True, False
         elif len(sys.argv) == 2:
-            # One argument: could be project name or year
+            # One argument: could be project name(s) or year
             arg = sys.argv[1]
             # Try to parse as year first
             try:
                 year_int = int(arg)
                 if 2000 <= year_int <= 2030:
                     # It's a year: default project, specific year
-                    return DEFAULT_PROJECT, arg, None, False, True
+                    return [DEFAULT_PROJECT], arg, None, False, True
             except ValueError:
                 pass
-            # It's a project name: specific project, current month
-            return arg, None, None, True, False
+            # It's a project name or comma-separated project names: specific project(s), current month
+            projects = [p.strip() for p in arg.split(',')]
+            return projects, None, None, True, False
         elif len(sys.argv) == 3:
-            # Two arguments: could be project+year or year+month
+            # Two arguments: could be project(s)+year or year+month
             arg1, arg2 = sys.argv[1], sys.argv[2]
             # Try to parse first arg as year
             try:
@@ -321,46 +326,54 @@ def parse_arguments() -> Tuple[str, Optional[str], Optional[str], bool, bool]:
                         month_int = int(arg2)
                         if 1 <= month_int <= 12:
                             # year and month: default project, specific year and month
-                            return DEFAULT_PROJECT, arg1, arg2, False, False
+                            return [DEFAULT_PROJECT], arg1, arg2, False, False
                     except ValueError:
                         pass
             except ValueError:
                 pass
             
-            # Try to parse second arg as year (project + year)
+            # Try to parse second arg as year (project(s) + year)
             try:
                 year_int = int(arg2)
                 if 2000 <= year_int <= 2030:
-                    # project and year: specific project, specific year
-                    return arg1, arg2, None, False, True
+                    # project(s) and year: specific project(s), specific year
+                    projects = [p.strip() for p in arg1.split(',')]
+                    return projects, arg2, None, False, True
             except ValueError:
                 pass
             
-            # If neither interpretation works, default to old behavior (project, year, month would be invalid)
+            # If neither interpretation works, show error
             print("Error: Invalid arguments. Second argument should be a year (YYYY) or the arguments should be year (YYYY) and month (MM).", file=sys.stderr)
             print("Usage:", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv]                         # Current month, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\"         # Current month, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\"    # Current month, multiple projects", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] <YYYY>                  # Whole year, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] <YYYY> <MM>             # Specific month, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\" <YYYY>  # Whole year, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\" <YYYY>  # Whole year, multiple projects", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\" <YYYY> <MM>  # Specific month, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\" <YYYY> <MM>  # Specific month, multiple projects", file=sys.stderr)
             print("", file=sys.stderr)
             print("Verbosity options:", file=sys.stderr)
             print("  -v   Show progress information", file=sys.stderr)
             print("  -vv  Show detailed debug information", file=sys.stderr)
             sys.exit(1)
         elif len(sys.argv) == 4:
-            # Three arguments: specific project, specific year and month
-            return sys.argv[1], sys.argv[2], sys.argv[3], False, False
+            # Three arguments: specific project(s), specific year and month
+            projects = [p.strip() for p in sys.argv[1].split(',')]
+            return projects, sys.argv[2], sys.argv[3], False, False
         else:
             print("Usage:", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv]                         # Current month, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\"         # Current month, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\"    # Current month, multiple projects", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] <YYYY>                  # Whole year, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] <YYYY> <MM>             # Specific month, default project ({DEFAULT_PROJECT})", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\" <YYYY>  # Whole year, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\" <YYYY>  # Whole year, multiple projects", file=sys.stderr)
             print(f"  {sys.argv[0]} [-v|-vv] \"<project_name>\" <YYYY> <MM>  # Specific month, specific project", file=sys.stderr)
+            print(f"  {sys.argv[0]} [-v|-vv] \"<project1,project2>\" <YYYY> <MM>  # Specific month, multiple projects", file=sys.stderr)
             print("", file=sys.stderr)
             print("Verbosity options:", file=sys.stderr)
             print("  -v   Show progress information", file=sys.stderr)
@@ -439,6 +452,7 @@ def analyze_pr_data(prs: List[Dict]) -> Dict:
     authors = Counter()
     reviewers = Counter()
     repositories = Counter()
+    projects = Counter()
     
     for pr in prs:
         # Count authors
@@ -455,21 +469,37 @@ def analyze_pr_data(prs: List[Dict]) -> Dict:
         # Count repositories
         repo_name = pr.get('repositoryName', 'Unknown')
         repositories[repo_name] += 1
+        
+        # Count projects
+        project_name = pr.get('projectName', 'Unknown')
+        projects[project_name] += 1
     
     return {
         'authors': authors.most_common(10),
         'reviewers': reviewers.most_common(10),
         'repositories': repositories.most_common(10),
+        'projects': projects.most_common(),
         'total_prs': len(prs)
     }
 
-def print_results(stats: Dict, project: str, period_desc: str, use_creation_date: bool):
+def print_results(stats: Dict, projects: List[str], period_desc: str, use_creation_date: bool):
     """Print the analysis results"""
     date_field_desc = "created" if use_creation_date else "completed"
     
     print()
-    print(f"### Overall PR Contributions {period_desc} for Project '{project}'")
+    if len(projects) == 1:
+        print(f"### Overall PR Contributions {period_desc} for Project '{projects[0]}'")
+    else:
+        project_names = "', '".join(projects)
+        print(f"### Overall PR Contributions {period_desc} for Projects '{project_names}'")
     print()
+    
+    # Show project breakdown if multiple projects
+    if len(projects) > 1 and 'projects' in stats:
+        print("Project breakdown:")
+        for project, count in stats['projects']:
+            print(f"  {project}: {count} PRs")
+        print()
     
     # Top authors
     print("Top 10 authors:")
@@ -531,10 +561,48 @@ def get_organization_from_azure_cli() -> str:
         print("Warning: Could not determine Azure DevOps organization, using default 'Next-Technology'", file=sys.stderr)
         return "Next-Technology"
 
+def fetch_prs_from_multiple_projects(organization: str, projects: List[str], start_date: str, end_date: str, use_creation_date: bool) -> List[Dict]:
+    """Fetch PRs from multiple projects and combine the results"""
+    all_prs = []
+    
+    if VERBOSITY >= 1:
+        print(f"Fetching data from {len(projects)} project(s)...", file=sys.stderr)
+    
+    for i, project in enumerate(projects):
+        if VERBOSITY >= 2:
+            print(f"Fetching data from project '{project}' ({i+1}/{len(projects)})...", file=sys.stderr)
+        elif VERBOSITY >= 1:
+            print(f"\rProject {i+1}/{len(projects)}: {project}", end='', file=sys.stderr)
+        
+        try:
+            # Initialize API client for this project
+            api = AzureDevOpsAPI(organization, project)
+            
+            # Fetch PR data for this project
+            project_prs = api.get_all_pull_requests(start_date, end_date, use_creation_date)
+            all_prs.extend(project_prs)
+            
+            if VERBOSITY >= 2:
+                print(f"  Found {len(project_prs)} PRs from project '{project}'", file=sys.stderr)
+                
+        except Exception as e:
+            print(f"\nWarning: Failed to fetch data from project '{project}': {e}", file=sys.stderr)
+            if VERBOSITY >= 2:
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+            continue
+    
+    if VERBOSITY >= 1:
+        print(f"\rCompleted fetching from {len(projects)} project(s)", file=sys.stderr)
+        if len(projects) > 1:
+            print(f"Total PRs found across all projects: {len(all_prs)}", file=sys.stderr)
+    
+    return all_prs
+
 def main():
     """Main execution function"""
     # Parse arguments
-    project, year, month, use_current_month, use_whole_year = parse_arguments()
+    projects, year, month, use_current_month, use_whole_year = parse_arguments()
     
     # Get date range
     start_date, end_date, period_desc = get_date_range(year, month, use_current_month, use_whole_year)
@@ -544,19 +612,27 @@ def main():
     
     if VERBOSITY >= 2:
         date_type = "creation" if USE_CREATION_DATE else "completion"
-        print(f"Using project '{project}' and data {period_desc}", file=sys.stderr)
+        if len(projects) == 1:
+            print(f"Using project '{projects[0]}' and data {period_desc}", file=sys.stderr)
+        else:
+            project_names = "', '".join(projects)
+            print(f"Using projects '{project_names}' and data {period_desc}", file=sys.stderr)
         print(f"Fetching PR data between {start_date} and {end_date} (by {date_type} date)...", file=sys.stderr)
         print(f"Organization: {organization}", file=sys.stderr)
     
-    # Initialize API client
-    api = AzureDevOpsAPI(organization, project)
-    
-    # Fetch PR data
+    # Fetch PR data from all projects
     try:
-        prs = api.get_all_pull_requests(start_date, end_date, USE_CREATION_DATE)
+        if len(projects) == 1:
+            # Single project - use existing logic
+            api = AzureDevOpsAPI(organization, projects[0])
+            prs = api.get_all_pull_requests(start_date, end_date, USE_CREATION_DATE)
+        else:
+            # Multiple projects - use new aggregation function
+            prs = fetch_prs_from_multiple_projects(organization, projects, start_date, end_date, USE_CREATION_DATE)
         
         if not prs:
-            print(f"No completed PRs found for the specified period ({start_date} to {end_date}) in project '{project}'.")
+            project_names = "', '".join(projects)
+            print(f"No completed PRs found for the specified period ({start_date} to {end_date}) in project(s) '{project_names}'.")
             print("This could be because:")
             if USE_CREATION_DATE:
                 print("  1. No PRs were created in this period")
@@ -565,14 +641,14 @@ def main():
                 print("  1. No PRs were completed (merged/closed) in this period")
                 print("  2. PRs exist but were created in this period and completed later")
             print("  3. API access limitations or project name mismatch")
-            print("Suggestion: Try using a more recent date range, toggle creation vs completion date filtering, or verify the project name.")
+            print("Suggestion: Try using a more recent date range, toggle creation vs completion date filtering, or verify the project name(s).")
             return
         
         # Analyze data
         stats = analyze_pr_data(prs)
         
         # Print results
-        print_results(stats, project, period_desc, USE_CREATION_DATE)
+        print_results(stats, projects, period_desc, USE_CREATION_DATE)
         
     except Exception as e:
         print(f"Error: Failed to fetch or process PR data: {e}", file=sys.stderr)
