@@ -98,7 +98,7 @@ class AzureDevOpsAPI:
         except subprocess.CalledProcessError as e:
             print(f"Error: Failed to get Azure CLI access token: {e}", file=sys.stderr)
             print("Make sure you're logged in with 'az login'", file=sys.stderr)
-            print("You may also need to run: az devops configure --defaults organization=https://dev.azure.com/Next-Technology", file=sys.stderr)
+            print("You may also need to run: az devops configure --defaults organization=https://dev.azure.com/<your-organization>", file=sys.stderr)
             sys.exit(1)
         except json.JSONDecodeError as e:
             print(f"Error: Failed to parse Azure CLI token response: {e}", file=sys.stderr)
@@ -519,9 +519,14 @@ def print_results(stats: Dict, projects: List[str], period_desc: str, use_creati
         print(f"  {repo}: {count} PRs")
 
 def get_organization_from_azure_cli() -> str:
-    """Get the Azure DevOps organization from Azure CLI configuration"""
+    """Get the Azure DevOps organization from environment or Azure CLI configuration"""
+    # 1) Environment variable override
+    env_org = os.environ.get("ADO_ORGANIZATION") or os.environ.get("AZURE_DEVOPS_ORGANIZATION")
+    if env_org:
+        return env_org.strip().rstrip('/')
+
     try:
-        # First try to get from Azure DevOps CLI configuration
+        # 2) Azure DevOps CLI configuration
         result = subprocess.run(
             ["az", "devops", "configure", "--list"],
             capture_output=True,
@@ -535,9 +540,9 @@ def get_organization_from_azure_cli() -> str:
                 # Extract organization name from URL
                 if 'dev.azure.com/' in org_url:
                     return org_url.split('dev.azure.com/')[1].rstrip('/')
-                return org_url
+                return org_url.rstrip('/')
         
-        # If no organization configured, try to get from git remote
+        # 3) Git remote URL as a fallback
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             capture_output=True,
@@ -550,16 +555,19 @@ def get_organization_from_azure_cli() -> str:
                 # Extract organization from URL like: https://dev.azure.com/organization/project/_git/repo
                 parts = url.split('dev.azure.com/')[1].split('/')
                 if parts:
-                    return parts[0]
+                    return parts[0].rstrip('/')
         
-        # Default fallback based on current context
-        print("Warning: Could not determine Azure DevOps organization from configuration", file=sys.stderr)
-        print("Trying to use 'Next-Technology' as default organization", file=sys.stderr)
-        return "Next-Technology"
+        # If still not found, error out with guidance
+        print("Error: Could not determine Azure DevOps organization.", file=sys.stderr)
+        print("Please set the ADO_ORGANIZATION environment variable, or configure Azure DevOps CLI:", file=sys.stderr)
+        print("  az devops configure --defaults organization=https://dev.azure.com/<your-organization>", file=sys.stderr)
+        sys.exit(1)
         
     except subprocess.CalledProcessError:
-        print("Warning: Could not determine Azure DevOps organization, using default 'Next-Technology'", file=sys.stderr)
-        return "Next-Technology"
+        print("Error: Could not determine Azure DevOps organization.", file=sys.stderr)
+        print("Please set the ADO_ORGANIZATION environment variable, or configure Azure DevOps CLI:", file=sys.stderr)
+        print("  az devops configure --defaults organization=https://dev.azure.com/<your-organization>", file=sys.stderr)
+        sys.exit(1)
 
 def fetch_prs_from_multiple_projects(organization: str, projects: List[str], start_date: str, end_date: str, use_creation_date: bool) -> List[Dict]:
     """Fetch PRs from multiple projects and combine the results"""
